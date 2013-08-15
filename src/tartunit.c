@@ -26,7 +26,8 @@ THE SOFTWARE.
 
 */
 
-#define TARTUNIT    /* turn tests on and off */
+#define  TARTUNIT    /* turn tests on (#define) and off (#undef) */
+
 #include "tart.h"
 #include "actor.h"
 #include "expr.h"
