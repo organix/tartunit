@@ -137,15 +137,15 @@ tartunit_event_targets_equal(Event expected, Event actual)
     return a_false;
 }
 
-/*
- *  Main entry-point
- */
-
 static void
 beh_ignore(Event e)
 {
     TRACE(fprintf(stderr, "beh_ignore{self=%p, msg=%p}\n", SELF(e), MSG(e)));
 }
+
+/*
+ *  Main entry-point
+ */
 
 int
 main()
@@ -153,14 +153,14 @@ main()
     /* tartunit unit tests */    
     
     /* TEST macro test */
-    TartunitConfig test_tartunit_config = tartunit_config_new();
-    while (tartunit_config_dispatch(test_tartunit_config) == a_true)
+    TartunitConfig __tartunit_config = tartunit_config_new();
+    while (tartunit_config_dispatch(__tartunit_config) == a_true)
         ;
-    assert(test_tartunit_config->expected_events == a_empty_list);
+    assert(__tartunit_config->expected_events == a_empty_list);
 
     /* EXPECT_EVENT macro test */
     Actor a_my_ignore = actor_new(beh_ignore);
-    Actor history = test_tartunit_config->history;
+    Actor history = __tartunit_config->history;
     Boolean already_occurred = a_false;
     Pair pair;
     while (history != a_empty_list) {
@@ -174,16 +174,16 @@ main()
     }
 
     if (already_occurred == a_false) {
-        test_tartunit_config->expected_events =
+        __tartunit_config->expected_events =
             list_push(
-                test_tartunit_config->expected_events,
+                __tartunit_config->expected_events,
                 tartunit_expected_event_new(
-                    event_new((Config)test_tartunit_config, a_my_ignore, (Any)0),
+                    event_new((Config)__tartunit_config, a_my_ignore, (Any)0),
                     tartunit_event_targets_equal));
     }
-    while (tartunit_config_dispatch(test_tartunit_config) == a_true)
+    while (tartunit_config_dispatch(__tartunit_config) == a_true)
         ;
-    assert(test_tartunit_config->expected_events != a_empty_list);
+    assert(__tartunit_config->expected_events != a_empty_list);
 
     /* Actual macro usage test */
     TEST(
