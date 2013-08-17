@@ -29,61 +29,64 @@ THE SOFTWARE.
 #ifndef _TARTUNIT_H_
 #define _TARTUNIT_H_
 
-#include "tart.h"
+#include <tart.h>
+#include <actor.h>
+#include <expr.h>
+#include <number.h>
 
-typedef struct tartunit_config TARTUNIT_CONFIG, *TartunitConfig;
-typedef struct tartunit_expected_event TARTUNIT_EXPECTED_EVENT, *TartunitExpectedEvent;
+typedef struct tunit_config TUNIT_CONFIG, *TUnitConfig;
+typedef struct tunit_expected_event TUNIT_EXPECTED_EVENT, *TUnitExpectedEvent;
 
-typedef Boolean (*TartunitEventExpectation)(Event expected, Event actual);
+typedef Actor (*TUnitEventExpectation)(Event expected, Event actual);
 
-struct tartunit_config {
+struct tunit_config {
     CONFIG      config;
     Actor       history;            // list of events already processed
     Actor       expected_events;    // list of expected events
 };
 
-struct tartunit_expected_event {
-    ACTOR                       _act;
-    Event                       event;
-    TartunitEventExpectation    expectation;
+struct tunit_expected_event {
+    ACTOR                    _act;
+    Event                    event;
+    TUnitEventExpectation    expectation;
 };
 
-extern TartunitConfig   tartunit_config_new();
-extern void             tartunit_config_enqueue(TartunitConfig cfg, Event e);
-extern void             tartunit_config_enlist(TartunitConfig cfg, Actor a);
-extern void             tartunit_config_send(TartunitConfig cfb, Actor target, Any msg);
-extern Boolean          tartunit_config_dispatch(TartunitConfig cfg);
+extern TUnitConfig  tunit_config_new();
+extern void         tunit_config_enqueue(TUnitConfig cfg, Actor e);
+extern void         tunit_config_enlist(TUnitConfig cfg, Actor a);
+extern void         tunit_config_send(TUnitConfig cfb, Actor target, Actor msg);
+extern Actor        tunit_config_dispatch(TUnitConfig cfg);
 
-extern Event    tartunit_event_new(TartunitConfig cfg, Actor target, Any msg);
+extern Actor        tunit_event_new(TUnitConfig cfg, Actor target, Actor msg);
 
-extern TartunitExpectedEvent tartunit_expected_event_new(Event event, TartunitEventExpectation expectation);
+extern TUnitExpectedEvent tunit_expected_event_new(Event event, TUnitEventExpectation expectation);
 
-extern Boolean  tartunit_event_targets_equal(Event expected, Event actual);
+extern Actor        tunit_event_targets_equal(Event expected, Event actual);
 
 #ifdef  TARTUNIT 
 
 #define TEST(test_body) ({ \
     /* create a new isolated configuration for the test */ \
-    TartunitConfig __tartunit_config = tartunit_config_new(); \
+    TUnitConfig __tunit_config = tunit_config_new(); \
     /* insert the test body */ \
     ({test_body}); \
     /* dispatch events until empty */ \
-    while (tartunit_config_dispatch(__tartunit_config) == a_true) \
+    while (tunit_config_dispatch(__tunit_config) == a_true) \
         ; \
     /* check that there are no left-over expected events */ \
     /* TODO: make this perhaps more meaningful instead of simple assertion fail */ \
-    assert(__tartunit_config->expected_events == a_empty_list); \
+    assert(__tunit_config->expected_events == a_empty_list); \
     /* TODO: clean up memory */ \
 })
 
 #define TEST_SEND(target, message) ({ \
-    tartunit_config_send(__tartunit_config, target, message); \
+    tunit_config_send(__tunit_config, target, message); \
 })
 
 #define EXPECT_EVENT(target) ({ \
     /* check configuration history to see if the event already occurred */ \
-    Actor history = __tartunit_config->history; \
-    Boolean already_occurred = a_false; \
+    Actor history = __tunit_config->history; \
+    Actor already_occurred = a_false; \
     Pair pair; \
     while (history != a_empty_list) { \
         pair = list_pop(history); \
@@ -97,12 +100,12 @@ extern Boolean  tartunit_event_targets_equal(Event expected, Event actual);
     } \
     /* if event not found in history, add to expected events */ \
     if (already_occurred == a_false) { \
-        __tartunit_config->expected_events = \
+        __tunit_config->expected_events = \
             list_push( \
-                __tartunit_config->expected_events, \
-                tartunit_expected_event_new( \
-                    event_new((Config)__tartunit_config, target, (Any)0), \
-                    tartunit_event_targets_equal)); \
+                __tunit_config->expected_events, \
+                (Actor)tunit_expected_event_new( \
+                    (Event)event_new((Config)__tunit_config, target, (Any)0), \
+                    tunit_event_targets_equal)); \
     } \
 })
 
