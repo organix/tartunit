@@ -94,7 +94,7 @@ tunit_config_dispatch(TUnitConfig tunit_cfg)
         // ok, fail, event is _NOT_ a request
         // TODO: change it to some sort of payload
         // think of sending a_event between machines... don't share memory
-        config_send(config, a_expectation, request_new(a_ok, a_fail, a_event));
+        config_send(config, a_expectation, PR(PR(a_ok, a_fail), a_event));
         while (config_dispatch(config) != NOTHING)
             ;
 
@@ -160,15 +160,18 @@ static void
 val_event_targets_equal(Event e)
 {
     TRACE(fprintf(stderr, "val_event_targets_equal{self=%p, msg=%p}\n", SELF(e), MSG(e)));
-    if (val_request != BEH(MSG(e))) { halt("val_event_targets_equal: request msg required"); }
-    Request r = (Request)MSG(e);
-    TRACE(fprintf(stderr, "val_event_targets_equal: ok=%p, fail=%p\n", r->ok, r->fail));
+    if (beh_pair != BEH(MSG(e))) { halt("val_event_targets_equal: pair msg required"); }
+    Pair msg = (Pair)MSG(e);
+    Pair cust = (Pair)msg->h;
+    Actor a_ok = cust->h;
+    Actor a_fail = cust->t;
+    TRACE(fprintf(stderr, "val_event_targets_equal: ok=%p, fail=%p\n", a_ok, a_fail));
     Actor expected = (Actor)DATA(SELF(e));
-    Event actual = (Event)r->req;
+    Event actual = (Event)msg->t;
     if (expected == SELF(actual)) {
-        config_send(SPONSOR(e), r->ok, (Actor)actual);
+        config_send(SPONSOR(e), a_ok, (Actor)actual);
     } else {
-        config_send(SPONSOR(e), r->fail, (Actor)actual);
+        config_send(SPONSOR(e), a_fail, (Actor)actual);
     }
 }
 
@@ -176,15 +179,18 @@ static void
 val_event_target_and_message_equal(Event e)
 {
     TRACE(fprintf(stderr, "val_event_target_and_message_equal{self=%p, msg=%p}\n", SELF(e), MSG(e)));
-    if (val_request != BEH(MSG(e))) { halt("val_event_target_and_message_equal: request msg required"); }
-    Request r = (Request)MSG(e);
-    TRACE(fprintf(stderr, "val_event_target_and_message_equal: ok=%p, fail=%p\n", r->ok, r->fail));
+    if (beh_pair != BEH(MSG(e))) { halt("val_event_target_and_message_equal: pair msg required"); }
+    Pair msg = (Pair)MSG(e);
+    Pair cust = (Pair)msg->h;
+    Actor a_ok = cust->h;
+    Actor a_fail = cust->t;
+    TRACE(fprintf(stderr, "val_event_target_and_message_equal: ok=%p, fail=%p\n", a_ok, a_fail));
     Event expected = (Event)DATA(SELF(e));
-    Event actual = (Event)r->req;
+    Event actual = (Event)msg->t;
     if (expected->target == actual->target && expected->message == actual->message) {
-        config_send(SPONSOR(e), r->ok, (Actor)actual);
+        config_send(SPONSOR(e), a_ok, (Actor)actual);
     } else {
-        config_send(SPONSOR(e), r->fail, (Actor)actual);
+        config_send(SPONSOR(e), a_fail, (Actor)actual);
     }
 }
 
@@ -231,7 +237,7 @@ main()
         Actor a_ok = tunit_ok_new();
         Actor a_fail = tunit_fail_new();
         Config config = config_new();
-        config_send(config, a_expectation, request_new(a_ok, a_fail, (Actor)e));
+        config_send(config, a_expectation, PR(PR(a_ok, a_fail), (Actor)e));
         while (config_dispatch(config) != NOTHING)
             ;
 

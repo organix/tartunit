@@ -95,7 +95,7 @@ extern Actor        tunit_config_dispatch(TUnitConfig cfg);
         Actor a_ok = tunit_ok_new(); \
         Actor a_fail = tunit_fail_new(); \
         Config config = config_new(); \
-        config_send(config, expectation, request_new(a_ok, a_fail, (Actor)e)); \
+        config_send(config, expectation, PR(PR(a_ok, a_fail), (Actor)e)); \
         while (config_dispatch(config) != NOTHING) \
             ; \
         \
