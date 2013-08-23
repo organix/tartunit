@@ -48,7 +48,7 @@ tunit_config_new()
     cfg->events = deque_new();
     cfg->actors = list_new();
     tunit_cfg->history = list_new();
-    tunit_cfg->expected_events = list_new();
+    tunit_cfg->expectations = list_new();
     return tunit_cfg;
 }
 inline void
@@ -72,43 +72,77 @@ tunit_config_send(TUnitConfig tunit_cfg, Actor target, Actor msg)
 Actor
 tunit_config_dispatch(TUnitConfig tunit_cfg)
 {
-    if (beh_config != BEH(tunit_cfg)) { halt("tunit_config_dispatch: tunit_config actor required"); }
-    if (deque_empty_p(((Config)tunit_cfg)->events) != a_false) {
-        TRACE(fprintf(stderr, "tunit_config_dispatch: <EMPTY>\n"));
-        return a_false;
+    Actor a_event = config_dispatch((Config)tunit_cfg);
+    if (a_event == NOTHING) { 
+        return a_event; 
     }
-    Event e = (Event)deque_take(((Config)tunit_cfg)->events);
-    TRACE(fprintf(stderr, "tunit_config_dispatch: event=%p, actor=%p, msg=%p\n", e, SELF(e), MSG(e)));
     
     /* test to see if the event is expected */
-    // TRACE(fprintf(stderr, "tunit_config_dispatch: expected_events=%p\n", tunit_cfg->expected_events));
-    Actor expected_events = tunit_cfg->expected_events;
-    Actor expected = a_false;
+    // TRACE(fprintf(stderr, "tunit_config_dispatch: expectations=%p\n", tunit_cfg->expectations));
+    Actor expectations = tunit_cfg->expectations;
     Pair pair;
     Pair previous = (Pair)0; // to facilitate element removal
     // TRACE(fprintf(stderr, "tunit_config_dispatch: previous=%p\n", previous));
-    while (expected_events != a_empty_list) {
-        pair = list_pop(expected_events);
-        TUnitExpectedEvent expected_event = (TUnitExpectedEvent)pair->h;
-        if (expected_event->expectation(expected_event->event, e) == a_true) {
+    while (expectations != a_empty_list) {
+        pair = list_pop(expectations);
+        Actor a_expectation = pair->h;
+        Actor a_ok = tunit_ok_new();
+        Actor a_fail = tunit_fail_new();
+        Config config = config_new();
+        config_send(config, a_expectation, request_new(a_ok, a_fail, a_event));
+        while (config_dispatch(config) != NOTHING)
+            ;
+
+        // if expectation was met and did not fail, event is expected
+        if (DATA(a_ok) == a_true && DATA(a_fail) != a_true) {
             // TRACE(fprintf(stderr, "tunit_config_dispatch: met expectation\n"));
-            /* remove matched event from the list */
+            /* remove matched expectation from the list */
             if (previous) { // in the middle of the list
                 // TRACE(fprintf(stderr, "tunit_config_dispatch: removing from middle of list\n"));
                 previous->t = pair->t;
             } else { // first item in list
                 // TRACE(fprintf(stderr, "tunit_config_dispatch: removing from front of list\n"));
-                tunit_cfg->expected_events = pair->t;
-            }  
+                tunit_cfg->expectations = pair->t;
+            }
             break;
-        }
+        } 
         previous = pair;
-        expected_events = (Actor)pair->t;
+        expectations = (Actor)pair->t;
+        // TODO: clean up memory from this internal configuration run
     }
 
-    (CODE(SELF(e)))(e); // INVOKE BEHAVIOR
-    tunit_cfg->history = list_push(tunit_cfg->history, (Actor)e); // PLACE PROCESSED EVENT IN HISTORY
-    return a_true;
+    tunit_cfg->history = list_push(tunit_cfg->history, a_event); // PLACE PROCESSED EVENT IN HISTORY
+    return a_event;
+}
+
+void
+val_tunit_ok(Event e)
+{
+    TRACE(fprintf(stderr, "val_tunit_ok{event=%p}\n", e));
+    DATA(SELF(e)) = a_true;
+}
+Actor 
+tunit_ok_new()
+{
+    Value val = NEW(VALUE);
+    BEH(val) = val_tunit_ok;
+    DATA(val) = NOTHING;
+    return (Actor)val;
+}
+
+void
+val_tunit_fail(Event e)
+{
+    TRACE(fprintf(stderr, "val_tunit_fail{event=%p}\n", e));
+    DATA(SELF(e)) = a_true;
+}
+Actor
+tunit_fail_new()
+{
+    Value val = NEW(VALUE);
+    BEH(val) = val_tunit_fail;
+    DATA(val) = NOTHING;
+    return (Actor)val;
 }
 
 void
@@ -117,27 +151,49 @@ beh_tunit_expected_event(Event e)
 
 }
 
-inline TUnitExpectedEvent
-tunit_expected_event_new(Event event, TUnitEventExpectation expectation)
+static void
+val_event_targets_equal(Event e)
 {
-    TUnitExpectedEvent expected_event = NEW(TUNIT_EXPECTED_EVENT);
-    BEH(expected_event) = beh_tunit_expected_event;
-    expected_event->event = event;
-    expected_event->expectation = expectation;
-    return expected_event;
+    TRACE(fprintf(stderr, "val_event_targets_equal{self=%p, msg=%p}\n", SELF(e), MSG(e)));
+    if (val_request != BEH(MSG(e))) { halt("val_event_targets_equal: request msg required"); }
+    Request r = (Request)MSG(e);
+    TRACE(fprintf(stderr, "val_event_targets_equal: ok=%p, fail=%p\n", r->ok, r->fail));
+    Actor expected = (Actor)DATA(SELF(e));
+    Event actual = (Event)r->req;
+    if (expected == SELF(actual)) {
+        config_send(SPONSOR(e), r->ok, (Actor)actual);
+    } else {
+        config_send(SPONSOR(e), r->fail, (Actor)actual);
+    }
 }
 
-Actor
-tunit_event_targets_equal(Event expected, Event actual)
+static void
+val_event_target_and_message_equal(Event e)
 {
-    if (SELF(expected) == SELF(actual)) { return a_true; }
-    return a_false;
+    TRACE(fprintf(stderr, "val_event_target_and_message_equal{self=%p, msg=%p}\n", SELF(e), MSG(e)));
+    if (val_request != BEH(MSG(e))) { halt("val_event_target_and_message_equal: request msg required"); }
+    Request r = (Request)MSG(e);
+    TRACE(fprintf(stderr, "val_event_target_and_message_equal: ok=%p, fail=%p\n", r->ok, r->fail));
+    Event expected = (Event)DATA(SELF(e));
+    Event actual = (Event)r->req;
+    if (expected->target == actual->target && expected->message == actual->message) {
+        config_send(SPONSOR(e), r->ok, (Actor)actual);
+    } else {
+        config_send(SPONSOR(e), r->fail, (Actor)actual);
+    }
 }
 
 static void
 beh_ignore(Event e)
 {
     TRACE(fprintf(stderr, "beh_ignore{self=%p, msg=%p}\n", SELF(e), MSG(e)));
+}
+
+static void
+val_forward(Event e)
+{
+    TRACE(fprintf(stderr, "val_forward{self=%p, msg=%p}\n", SELF(e), MSG(e)));
+    config_send(SPONSOR(e), DATA(SELF(e)), MSG(e));
 }
 
 /*
@@ -148,44 +204,78 @@ int
 main()
 {
     /* tunit unit tests */    
+    TRACE(fprintf(stderr, "a_true: %p, a_false: %p, NOTHING: %p\n", a_true, a_false, NOTHING));
     
     /* TEST macro test */
+    TRACE(fprintf(stderr, "--- TEST macro test ---\n"));
     TUnitConfig __tunit_config = tunit_config_new();
-    while (tunit_config_dispatch(__tunit_config) == a_true)
+    while (tunit_config_dispatch(__tunit_config) != NOTHING)
         ;
-    assert(__tunit_config->expected_events == a_empty_list);
+    assert(__tunit_config->expectations == a_empty_list);
 
-    /* EXPECT_EVENT macro test */
+    /* EXPECT_EVENT(expectation) macro test - (event targets equal) */
+    TRACE(fprintf(stderr, "--- <expanded> EXPECT_EVENT(expectation) macro test - (event targets equal) ---\n"));
     Actor a_my_ignore = actor_new(beh_ignore);
-    Actor history = __tunit_config->history;
+    Actor a_expectation = value_new(val_event_targets_equal, a_my_ignore);
     Actor already_occurred = a_false;
+    Actor history = __tunit_config->history;
     Pair pair;
     while (history != a_empty_list) {
         pair = list_pop(history);
         Event e = (Event)pair->h;
-        if (SELF(e) == a_my_ignore) {
+        Actor a_ok = tunit_ok_new();
+        Actor a_fail = tunit_fail_new();
+        Config config = config_new();
+        config_send(config, a_expectation, request_new(a_ok, a_fail, (Actor)e));
+        while (config_dispatch(config) != NOTHING)
+            ;
+
+        /* if expectation against history is met, event already occurred */
+        if (DATA(a_ok) == a_true && DATA(a_fail) != a_true) {
             already_occurred = a_true;
             break;
         }
         history = (Actor)pair->t;
     }
-
     if (already_occurred == a_false) {
-        __tunit_config->expected_events =
-            list_push(
-                __tunit_config->expected_events,
-                (Actor)tunit_expected_event_new(
-                    (Event)event_new((Config)__tunit_config, a_my_ignore, (Actor)0),
-                    tunit_event_targets_equal));
+        __tunit_config->expectations =
+            list_push(__tunit_config->expectations, a_expectation);
     }
-    while (tunit_config_dispatch(__tunit_config) == a_true)
+    while (tunit_config_dispatch(__tunit_config) != NOTHING)
         ;
-    assert(__tunit_config->expected_events != a_empty_list);
+    assert(__tunit_config->expectations != a_empty_list);
 
     /* Actual macro usage test */
+    TRACE(fprintf(stderr, "--- EXPECT_EVENT(expectation) macro test - (event targets equal) ---\n"));
     TEST(
-        EXPECT_EVENT(a_my_ignore);
+        EXPECT_EVENT(a_expectation);
         TEST_SEND(a_my_ignore, (Actor)0);
+    );
+
+    /* EXPECT_EVENT(expectation) macro test -- (target and message equal) */
+    TRACE(fprintf(stderr, "--- EXPECT_EVENT(expectation) macro test - (target and message equal) ---\n"));
+    Actor a_expected_event = event_new((Config)__tunit_config, a_my_ignore, (Actor)0);
+    Actor a_expect_target_and_msg_equal_expectation = value_new(val_event_target_and_message_equal, a_expected_event);
+    TEST(
+        EXPECT_EVENT(a_expect_target_and_msg_equal_expectation);
+        TEST_SEND(a_my_ignore, (Actor)0);
+    );
+
+    TRACE(fprintf(stderr, "--- indirect EXPECT_EVENT(expectation) macro test ---\n"));
+    Actor a_second_ignore = actor_new(beh_ignore);
+    Actor a_first_forward = value_new(val_forward, a_second_ignore);
+    Actor a_expect_target_is_first_forward = value_new(val_event_targets_equal, a_first_forward);
+    Actor a_expect_target_is_second_ignore = value_new(val_event_targets_equal, a_second_ignore);
+    TEST(
+        EXPECT_EVENT(a_expect_target_is_second_ignore);
+        TEST_SEND(a_first_forward, (Actor)0);
+    );
+
+    TRACE(fprintf(stderr, "--- multiple EXPECT_EVENT(expectation) macro test ---\n"));
+    TEST(
+        EXPECT_EVENT(a_expect_target_is_second_ignore);
+        TEST_SEND(a_first_forward, (Actor)0);
+        EXPECT_EVENT(a_expect_target_is_first_forward);
     );
 
     return 0;

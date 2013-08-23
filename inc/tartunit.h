@@ -34,34 +34,35 @@ THE SOFTWARE.
 #include <expr.h>
 #include <number.h>
 
-typedef struct tunit_config TUNIT_CONFIG, *TUnitConfig;
-typedef struct tunit_expected_event TUNIT_EXPECTED_EVENT, *TUnitExpectedEvent;
+/**
+Expectation [*|*]
+             | +--> DATA
+             V
+            CODE
+Note: Expectation is simply a Value. Expectation message protocol consists of
+accepting only Request actor (request_new(ok, fail, req), where `ok` is success
+actor, `fail` is fail actor, and `req` is the event to test expectations against.
+**/
 
-typedef Actor (*TUnitEventExpectation)(Event expected, Event actual);
+typedef struct tunit_config TUNIT_CONFIG, *TUnitConfig;
 
 struct tunit_config {
-    CONFIG      config;
-    Actor       history;            // list of events already processed
-    Actor       expected_events;    // list of expected events
+    CONFIG          config;
+    Actor           history;        // list of events already processed
+    Actor           expectations;   // list of expected events
 };
 
-struct tunit_expected_event {
-    ACTOR                    _act;
-    Event                    event;
-    TUnitEventExpectation    expectation;
-};
+extern void         val_tunit_ok(Event e);
+extern Actor        tunit_ok_new();
+
+extern void         val_tunit_fail(Event e);
+extern Actor        tunit_fail_new();
 
 extern TUnitConfig  tunit_config_new();
 extern void         tunit_config_enqueue(TUnitConfig cfg, Actor e);
 extern void         tunit_config_enlist(TUnitConfig cfg, Actor a);
 extern void         tunit_config_send(TUnitConfig cfb, Actor target, Actor msg);
 extern Actor        tunit_config_dispatch(TUnitConfig cfg);
-
-extern Actor        tunit_event_new(TUnitConfig cfg, Actor target, Actor msg);
-
-extern TUnitExpectedEvent tunit_expected_event_new(Event event, TUnitEventExpectation expectation);
-
-extern Actor        tunit_event_targets_equal(Event expected, Event actual);
 
 #ifdef  TARTUNIT 
 
@@ -71,11 +72,11 @@ extern Actor        tunit_event_targets_equal(Event expected, Event actual);
     /* insert the test body */ \
     ({test_body}); \
     /* dispatch events until empty */ \
-    while (tunit_config_dispatch(__tunit_config) == a_true) \
+    while (tunit_config_dispatch(__tunit_config) != NOTHING) \
         ; \
     /* check that there are no left-over expected events */ \
     /* TODO: make this perhaps more meaningful instead of simple assertion fail */ \
-    assert(__tunit_config->expected_events == a_empty_list); \
+    assert(__tunit_config->expectations == a_empty_list); \
     /* TODO: clean up memory */ \
 })
 
@@ -83,16 +84,23 @@ extern Actor        tunit_event_targets_equal(Event expected, Event actual);
     tunit_config_send(__tunit_config, target, message); \
 })
 
-#define EXPECT_EVENT(target) ({ \
+#define EXPECT_EVENT(expectation) ({ \
     /* check configuration history to see if the event already occurred */ \
-    Actor history = __tunit_config->history; \
     Actor already_occurred = a_false; \
+    Actor history = __tunit_config->history; \
     Pair pair; \
     while (history != a_empty_list) { \
         pair = list_pop(history); \
         Event e = (Event)pair->h; \
-        /* TODO: elaborate this after mechanism validation */ \
-        if (SELF(e) == target) { \
+        Actor a_ok = tunit_ok_new(); \
+        Actor a_fail = tunit_fail_new(); \
+        Config config = config_new(); \
+        config_send(config, expectation, request_new(a_ok, a_fail, (Actor)e)); \
+        while (config_dispatch(config) != NOTHING) \
+            ; \
+        \
+        /* if expectation against history is met, event already occurred */ \
+        if (DATA(a_ok) == a_true && DATA(a_fail) != a_true) { \
             already_occurred = a_true; \
             break; \
         } \
@@ -100,12 +108,8 @@ extern Actor        tunit_event_targets_equal(Event expected, Event actual);
     } \
     /* if event not found in history, add to expected events */ \
     if (already_occurred == a_false) { \
-        __tunit_config->expected_events = \
-            list_push( \
-                __tunit_config->expected_events, \
-                (Actor)tunit_expected_event_new( \
-                    (Event)event_new((Config)__tunit_config, target, (Any)0), \
-                    tunit_event_targets_equal)); \
+        __tunit_config->expectations = \
+            list_push(__tunit_config->expectations, expectation); \
     } \
 })
 
