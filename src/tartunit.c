@@ -80,15 +80,20 @@ tunit_config_dispatch(TUnitConfig tunit_cfg)
     /* test to see if the event is expected */
     // TRACE(fprintf(stderr, "tunit_config_dispatch: expectations=%p\n", tunit_cfg->expectations));
     Actor expectations = tunit_cfg->expectations;
+    // TODO: abusing lists here due to lack of Set as a data structure
     Pair pair;
     Pair previous = (Pair)0; // to facilitate element removal
     // TRACE(fprintf(stderr, "tunit_config_dispatch: previous=%p\n", previous));
     while (expectations != a_empty_list) {
         pair = list_pop(expectations);
         Actor a_expectation = pair->h;
+        // TODO: rewrite to use single customer... 
         Actor a_ok = tunit_ok_new();
         Actor a_fail = tunit_fail_new();
         Config config = config_new();
+        // ok, fail, event is _NOT_ a request
+        // TODO: change it to some sort of payload
+        // think of sending a_event between machines... don't share memory
         config_send(config, a_expectation, request_new(a_ok, a_fail, a_event));
         while (config_dispatch(config) != NOTHING)
             ;

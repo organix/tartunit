@@ -40,7 +40,7 @@ Expectation [*|*]
              V
             CODE
 Note: Expectation is simply a Value. Expectation message protocol consists of
-accepting only Request actor (request_new(ok, fail, req), where `ok` is success
+accepting only Request actor: request_new(ok, fail, req), where `ok` is success
 actor, `fail` is fail actor, and `req` is the event to test expectations against.
 **/
 
