@@ -2,11 +2,11 @@
 # Makefile for tartunit library (libtartunit.a)
 #
 
-INC=	../inc
-LIB=	../lib
-TART=   ../tart
+INC=		../inc
+LIB=		../lib
+TARTDIR=	../tart
 
-LIBTART= 	$(TART)/lib/libtart.a
+LIBTART= 	$(TARTDIR)/lib/libtart.a
 # LIBTARTUNIT=$(LIB)/libtartunit.a
 INCS=	   	$(INC)/tartunit.h
 # OBJS=		actor.o \
@@ -14,7 +14,7 @@ INCS=	   	$(INC)/tartunit.h
 # 			number.o
 PROGS=		tartunit
 
-CFLAGS= -I$(INC) -I$(TART)/inc -I$(LIBTART)
+CFLAGS= -I$(INC) -I$(TARTDIR)/inc -I$(LIBTART)
 
 # all: $(LIBTARTUNIT) $(PROGS)
 all: $(LIBTART) $(PROGS)
@@ -23,7 +23,7 @@ test: all
 	./tartunit
 
 $(LIBTART):
-	cd $(TART)/src; make clean && make
+	cd $(TARTDIR)/src; make clean && make
 # $(LIBTARTUNIT): $(OBJS)
 # 	$(AR) rv $@ $(OBJS)
 
@@ -42,4 +42,4 @@ clean:
 	mkdir $(LIB)
 	rm -f $(PROGS)
 	rm -f *.o *~ *.stackdump
-	cd $(TART)/src; make clean
+	cd $(TARTDIR)/src; make clean
