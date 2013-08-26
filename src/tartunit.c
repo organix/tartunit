@@ -88,18 +88,16 @@ tunit_config_dispatch(TUnitConfig tunit_cfg)
         pair = list_pop(expectations);
         Actor a_expectation = pair->h;
         // TODO: rewrite to use single customer... 
-        Actor a_ok = tunit_ok_new();
-        Actor a_fail = tunit_fail_new();
+        Actor a_runner = tunit_runner_new();
         Config config = config_new();
-        // ok, fail, event is _NOT_ a request
-        // TODO: change it to some sort of payload
-        // think of sending a_event between machines... don't share memory
-        config_send(config, a_expectation, PR(PR(a_ok, a_fail), a_event));
+        // TODO: think of sending a_event between machines... don't share memory
+        config_send(config, a_expectation, PR(a_runner, a_event));
         while (config_dispatch(config) != NOTHING)
             ;
 
         // if expectation was met and did not fail, event is expected
-        if (DATA(a_ok) == a_true && DATA(a_fail) != a_true) {
+        Pair data = (Pair)DATA(a_runner);
+        if (data->h /*ok*/ == a_true && data->t /*fail*/ != a_true) {
             // TRACE(fprintf(stderr, "tunit_config_dispatch: met expectation\n"));
             /* remove matched expectation from the list */
             if (previous) { // in the middle of the list
@@ -121,32 +119,24 @@ tunit_config_dispatch(TUnitConfig tunit_cfg)
 }
 
 void
-val_tunit_ok(Event e)
+val_tunit_runner(Event e)
 {
-    TRACE(fprintf(stderr, "val_tunit_ok{event=%p}\n", e));
-    DATA(SELF(e)) = a_true;
-}
-Actor 
-tunit_ok_new()
-{
-    Value val = NEW(VALUE);
-    BEH(val) = val_tunit_ok;
-    DATA(val) = NOTHING;
-    return (Actor)val;
-}
-
-void
-val_tunit_fail(Event e)
-{
-    TRACE(fprintf(stderr, "val_tunit_fail{event=%p}\n", e));
-    DATA(SELF(e)) = a_true;
+    TRACE(fprintf(stderr, "val_tunit_runner{event=%p}\n", e));
+    Pair pair = DATA(SELF(e));
+    if (MSG(e) == a_true) {
+        pair->h = a_true;
+    } else if (MSG(e) == a_false) {
+        pair->t = a_true;
+    } else {
+        expr_value(e);
+    }
 }
 Actor
-tunit_fail_new()
+tunit_runner_new()
 {
     Value val = NEW(VALUE);
-    BEH(val) = val_tunit_fail;
-    DATA(val) = NOTHING;
+    BEH(val) = val_tunit_runner;
+    DATA(val) = PR(NOTHING, NOTHING);
     return (Actor)val;
 }
 
@@ -162,16 +152,13 @@ val_event_targets_equal(Event e)
     TRACE(fprintf(stderr, "val_event_targets_equal{self=%p, msg=%p}\n", SELF(e), MSG(e)));
     if (beh_pair != BEH(MSG(e))) { halt("val_event_targets_equal: pair msg required"); }
     Pair msg = (Pair)MSG(e);
-    Pair cust = (Pair)msg->h;
-    Actor a_ok = cust->h;
-    Actor a_fail = cust->t;
-    TRACE(fprintf(stderr, "val_event_targets_equal: ok=%p, fail=%p\n", a_ok, a_fail));
+    Actor a_cust = msg->h;
     Actor expected = (Actor)DATA(SELF(e));
     Event actual = (Event)msg->t;
     if (expected == SELF(actual)) {
-        config_send(SPONSOR(e), a_ok, (Actor)actual);
+        config_send(SPONSOR(e), a_cust, a_true);
     } else {
-        config_send(SPONSOR(e), a_fail, (Actor)actual);
+        config_send(SPONSOR(e), a_cust, a_false);
     }
 }
 
@@ -181,16 +168,13 @@ val_event_target_and_message_equal(Event e)
     TRACE(fprintf(stderr, "val_event_target_and_message_equal{self=%p, msg=%p}\n", SELF(e), MSG(e)));
     if (beh_pair != BEH(MSG(e))) { halt("val_event_target_and_message_equal: pair msg required"); }
     Pair msg = (Pair)MSG(e);
-    Pair cust = (Pair)msg->h;
-    Actor a_ok = cust->h;
-    Actor a_fail = cust->t;
-    TRACE(fprintf(stderr, "val_event_target_and_message_equal: ok=%p, fail=%p\n", a_ok, a_fail));
+    Actor a_cust = msg->h;
     Event expected = (Event)DATA(SELF(e));
     Event actual = (Event)msg->t;
     if (expected->target == actual->target && expected->message == actual->message) {
-        config_send(SPONSOR(e), a_ok, (Actor)actual);
+        config_send(SPONSOR(e), a_cust, a_true);
     } else {
-        config_send(SPONSOR(e), a_fail, (Actor)actual);
+        config_send(SPONSOR(e), a_cust, a_false);
     }
 }
 
@@ -234,15 +218,15 @@ main()
     while (history != a_empty_list) {
         pair = list_pop(history);
         Event e = (Event)pair->h;
-        Actor a_ok = tunit_ok_new();
-        Actor a_fail = tunit_fail_new();
+        Actor a_runner = tunit_runner_new();
         Config config = config_new();
-        config_send(config, a_expectation, PR(PR(a_ok, a_fail), (Actor)e));
+        config_send(config, a_expectation, PR(a_runner, (Actor)e));
         while (config_dispatch(config) != NOTHING)
             ;
 
         /* if expectation against history is met, event already occurred */
-        if (DATA(a_ok) == a_true && DATA(a_fail) != a_true) {
+        Pair data = (Pair)DATA(a_runner);
+        if (data->h /*ok*/ == a_true && data->t /*fail*/ != a_true) {
             already_occurred = a_true;
             break;
         }

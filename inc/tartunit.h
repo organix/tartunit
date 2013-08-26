@@ -52,11 +52,8 @@ struct tunit_config {
     Actor           expectations;   // list of expected events
 };
 
-extern void         val_tunit_ok(Event e);
-extern Actor        tunit_ok_new();
-
-extern void         val_tunit_fail(Event e);
-extern Actor        tunit_fail_new();
+extern void         val_tunit_runner(Event e);
+extern Actor        tunit_runner_new();
 
 extern TUnitConfig  tunit_config_new();
 extern void         tunit_config_enqueue(TUnitConfig cfg, Actor e);
@@ -92,15 +89,15 @@ extern Actor        tunit_config_dispatch(TUnitConfig cfg);
     while (history != a_empty_list) { \
         pair = list_pop(history); \
         Event e = (Event)pair->h; \
-        Actor a_ok = tunit_ok_new(); \
-        Actor a_fail = tunit_fail_new(); \
+        Actor a_runner = tunit_runner_new(); \
         Config config = config_new(); \
-        config_send(config, expectation, PR(PR(a_ok, a_fail), (Actor)e)); \
+        config_send(config, expectation, PR(a_runner, (Actor)e)); \
         while (config_dispatch(config) != NOTHING) \
             ; \
         \
         /* if expectation against history is met, event already occurred */ \
-        if (DATA(a_ok) == a_true && DATA(a_fail) != a_true) { \
+        Pair data = (Pair)DATA(a_runner); \
+        if (data->h /*ok*/ == a_true && data->t /*fail*/ != a_true) { \
             already_occurred = a_true; \
             break; \
         } \
