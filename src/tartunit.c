@@ -122,7 +122,7 @@ void
 val_tunit_runner(Event e)
 {
     TRACE(fprintf(stderr, "val_tunit_runner{event=%p}\n", e));
-    Pair pair = DATA(SELF(e));
+    Pair pair = (Pair)DATA(SELF(e));
     if (MSG(e) == a_true) {
         pair->h = a_true;
     } else if (MSG(e) == a_false) {
@@ -130,6 +130,7 @@ val_tunit_runner(Event e)
     } else {
         expr_value(e);
     }
+    TRACE(fprintf(stderr, "val_tunit_runner: pass=%p, fail=%p\n", pair->h, pair->t));
 }
 Actor
 tunit_runner_new()
